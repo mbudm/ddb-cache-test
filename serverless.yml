@@ -1,0 +1,78 @@
+service: ddb-cache-test
+
+frameworkVersion: ">=1.1.0 <2.0.0"
+
+plugins:
+  - serverless-webpack
+
+custom:
+  webpack:
+    includeModules:
+      forceExclude:
+        - aws-sdk
+provider:
+  name: aws
+  runtime: nodejs8.10
+  region: us-east-1
+  environment:
+    DYNAMODB_TABLE_INDEXES: ${self:service}-${opt:stage, self:provider.stage}-indexes
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:BatchGetItem
+        - dynamodb:BatchWriteItem
+      Resource:
+        - "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE_INDEXES}"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+        - logs:DescribeLogStreams
+      Resource:
+        - "arn:aws:logs:*:*:*"
+functions:
+  get:
+    handler: index.getItem
+    memorySize: 128
+    events:
+      - http:
+          path: get
+          method: get
+          cors: true
+
+  put:
+    handler: index.putItem
+    memorySize: 128
+    events:
+      - http:
+          path: put
+          method: put
+          cors: true
+
+resources:
+  Resources:
+    IndexesDynamoDbTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:provider.environment.DYNAMODB_TABLE_INDEXES}
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+    
+package:
+  exclude:
+    - node_modules/**
+    - '!node_modules/uuid/**'
+    - '!node_modules/babel-runtime/**'
+    - '!node_modules/sharp/**'
+    - '!node_modules/dynamodb-data-types/**'
