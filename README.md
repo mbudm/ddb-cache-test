@@ -1,6 +1,7 @@
 
 ## update/add index
-`sls invoke -f put --data '{"body":"{\"indexUpdate\":{\"tags\":{\"butterfly\":1}}}'`
+`sls invoke -f put --path payloads/tag-increment.json`
+`sls invoke -f put --path payloads/tag-decrement.json`
 
 ## get 
 `sls invoke -f get`

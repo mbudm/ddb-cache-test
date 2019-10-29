@@ -20,10 +20,10 @@ export const INDEX_KEYS_PROP = "indexKeys";
 const dynamodb = new DynamoDB.DocumentClient({});
 
 
-const defaultIndex: IIndex = {
+const defaultIndex = ():IIndex => ({
   people: {},
   tags: {},
-};
+});
 
 const getIndexTableName = (): string => {
   if (process.env.DYNAMODB_TABLE_INDEXES) {
@@ -56,7 +56,7 @@ export function getIndexRecords(
 
 export function parseIndexesObject(ddbResponse: DocClient.BatchGetItemOutput): IIndex {
   const indexes: IIndex = {
-    ...defaultIndex,
+    ...defaultIndex(),
   };
   if (ddbResponse.Responses) {
     const tagsRecord = ddbResponse.Responses[getIndexTableName()]
@@ -69,8 +69,8 @@ export function parseIndexesObject(ddbResponse: DocClient.BatchGetItemOutput): I
   return indexes;
 }
 
-export function updateCleanIndexes(indexObject: IIndex): Promise<PromiseResult<BatchWriteItemOutput, AWSError>> {
-  const ddbParams: DocClient.BatchWriteItemInput = {
+export function getUpdateCleanIndexesDddbParams(indexObject: IIndex): DocClient.BatchWriteItemInput  {
+  return {
     RequestItems: {
       [getIndexTableName()]: [
         {
@@ -96,12 +96,16 @@ export function updateCleanIndexes(indexObject: IIndex): Promise<PromiseResult<B
       ]
     }
   }
+}
+export function updateCleanIndexes(
+  ddbParams: DocClient.BatchWriteItemInput
+): Promise<PromiseResult<BatchWriteItemOutput, AWSError>> {
   return dynamodb.batchWrite(ddbParams).promise();
 }
 
-export function cleanZeroIndexes(indexObject: IIndex): Promise<IIndex> | IIndex {
+export function cleanZeroIndexes(indexObject: IIndex) {
   const cleanedIndex: IIndex = {
-    ...defaultIndex,
+    ...defaultIndex(),
   };
   let updateNeeded = false;
   Object.keys(indexObject.people).forEach((p) => {
@@ -119,10 +123,10 @@ export function cleanZeroIndexes(indexObject: IIndex): Promise<IIndex> | IIndex 
       cleanedIndex.tags[t] = indexObject.tags[t];
     }
   });
-  return updateNeeded ?
-    updateCleanIndexes(cleanedIndex)
-      .then(() => cleanedIndex) :
-    cleanedIndex;
+  return {
+    updateNeeded,
+    cleanedIndex
+  }
 }
 
 // get each index (if no record then create one)
@@ -132,12 +136,18 @@ export async function getItem(event: APIGatewayProxyEvent, context: Context, cal
     const ddbParams: DocClient.BatchGetItemInput = getDynamoDbBatchGetItemParams();
     const ddbResponse: DocClient.BatchGetItemOutput = await getIndexRecords(ddbParams);
     const indexesObject: IIndex = parseIndexesObject(ddbResponse);
-    const cleanZeroIndexesObject: IIndex = await cleanZeroIndexes(indexesObject);
+    const cleanZeroIndexesObject = cleanZeroIndexes(indexesObject);
+    let cleanUpdateDdbParams;
+    if(cleanZeroIndexesObject.updateNeeded){
+      cleanUpdateDdbParams = getUpdateCleanIndexesDddbParams(cleanZeroIndexesObject.cleanedIndex);
+      await updateCleanIndexes(cleanUpdateDdbParams)
+    }
     return callback(null, success({
       ddbParams,
       ddbResponse,
       indexesObject,
-      cleanZeroIndexesObject
+      cleanZeroIndexesObject,
+      cleanUpdateDdbParams
     }));
   } catch (err) {
     console.error(err);
@@ -147,11 +157,11 @@ export async function getItem(event: APIGatewayProxyEvent, context: Context, cal
 
 export function getDynamoDbUpdateItemParams(
   indexId: string,
-  indexData: IIndexDictionary,
+  indexData: IIndexDictionary | undefined,
 ): DocClient.UpdateItemInput | null {
   const timestamp = new Date().getTime();
-  const validKeys =  Object.keys(indexData).filter((k) => indexData[k] !== undefined);
-  if (validKeys.length > 0) {
+  const validKeys =  indexData ? Object.keys(indexData).filter((k) => indexData[k] !== undefined) : [];
+  if (validKeys.length > 0 && indexData) {
     /*
     https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ExpressionAttributeNames.html
     "If an attribute name begins with a number or contains a space, a special character,
@@ -221,15 +231,17 @@ export function updateAndHandleEmptyMap(ddbParams: DocClient.UpdateItemInput): P
 
 export function updateIndexRecord(
   indexId: string,
-  indexData: IIndexDictionary,
+  indexData: IIndexDictionary | undefined,
 ): Promise<DocClient.UpdateItemOutput> | undefined {
   const ddbParams: DocClient.UpdateItemInput | null = getDynamoDbUpdateItemParams(indexId, indexData);
   return ddbParams ? updateAndHandleEmptyMap(ddbParams) : undefined ;
 }
 
 export async function putItem(event: APIGatewayProxyEvent, context: Context, callback: Callback): Promise<void> {
+  const requestBody: IPutIndexRequest = event.body ?
+    JSON.parse(event.body) :
+    { indexUpdate: defaultIndex() as IIndexUpdate};
   try {
-    const requestBody: IPutIndexRequest = JSON.parse(event.body!) ;
     // update each index - change to batch write item
     const tagsUpdateResponse: DocClient.UpdateItemOutput | undefined =
       await updateIndexRecord(TAGS_ID, requestBody.indexUpdate.tags);

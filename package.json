@@ -4,7 +4,7 @@
   "description": "test ddb poss bug",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "tape -r ts-node/register -r babel-register './*.test.ts' | tap-spec"
   },
   "author": "",
   "license": "ISC",
@@ -12,8 +12,13 @@
     "@types/aws-lambda": "^8.10.34",
     "@types/node": "^12.11.7",
     "aws-sdk": "^2.558.0",
+    "babel-runtime": "^6.26.0",
     "serverless-webpack": "^5.3.1",
+    "tap-spec": "^5.0.0",
+    "tape": "^4.11.0",
+    "ts-babel-node": "^1.1.1",
     "ts-loader": "^6.2.1",
+    "ts-node": "^8.4.1",
     "typescript": "^3.6.4",
     "webpack": "^4.41.2",
     "webpack-node-externals": "^1.7.2"

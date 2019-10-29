@@ -19,6 +19,7 @@ provider:
   iamRoleStatements:
     - Effect: Allow
       Action:
+        - dynamodb:UpdateItem
         - dynamodb:BatchGetItem
         - dynamodb:BatchWriteItem
       Resource:
