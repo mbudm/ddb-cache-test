@@ -11,7 +11,7 @@
   "dependencies": {
     "@types/aws-lambda": "^8.10.34",
     "@types/node": "^12.11.7",
-    "aws-sdk": "^2.558.0",
+    "aws-sdk": "^2.814.0",
     "babel-runtime": "^6.26.0",
     "serverless-webpack": "^5.3.1",
     "tap-spec": "^5.0.0",
